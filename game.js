@@ -1,744 +1,590 @@
-// ============================================================
-// GAME CONFIGURATION & CONSTANTS
-// ============================================================
+// ---------------- Constants & Settings ----------------
+const MAX_HEALTH = 100;
+const PLAYER_BASE_ATTACK = 15;
+const PLAYER_BASE_DEFENSE = 5;
 
-const CONFIG = {
-	MAX_HEALTH: 100,
-	PLAYER_BASE_ATTACK: 15,
-	PLAYER_BASE_DEFENSE: 5,
-	DAMAGE_VARIANCE: { min: 0.85, max: 1.15 },
-	MIN_DAMAGE: 3,
-
-	// Difficulty-based player stats
-	DIFFICULTY: {
-		easy: {
-			healthBonus: 30,
-			attackBonus: 5,
-			defenseBonus: 3,
-			healthRecovery: 25,
-			attackGain: 3
-		},
-		medium: {
-			healthBonus: 0,
-			attackBonus: 0,
-			defenseBonus: 0,
-			healthRecovery: 15,
-			attackGain: 2
-		},
-		hard: {
-			healthBonus: -20,
-			attackBonus: -3,
-			defenseBonus: -2,
-			healthRecovery: 10,
-			attackGain: 1
-		}
-	},
-
-	// Enemy difficulty multipliers
-	ENEMY_DIFFICULTY: {
-		easy: {
-			healthMultiplier: 0.7,
-			attackMultiplier: 0.75,
-			defenseMultiplier: 0.7
-		},
-		medium: {
-			healthMultiplier: 1.0,
-			attackMultiplier: 1.0,
-			defenseMultiplier: 1.0
-		},
-		hard: {
-			healthMultiplier: 1.4,
-			attackMultiplier: 1.3,
-			defenseMultiplier: 1.3
-		}
-	}
+const DIFFICULTY_SETTINGS = {
+  easy: {
+    player: {
+      health: MAX_HEALTH + 30,
+      attack: PLAYER_BASE_ATTACK + 5,
+      defense: PLAYER_BASE_DEFENSE + 3,
+    },
+    enemy: {
+      health_multiplier: 0.7,
+      attack_multiplier: 0.75,
+      defense_multiplier: 0.7,
+    },
+    rewards: { health: 25, attack: 3 },
+  },
+  medium: {
+    player: {
+      health: MAX_HEALTH,
+      attack: PLAYER_BASE_ATTACK,
+      defense: PLAYER_BASE_DEFENSE,
+    },
+    enemy: {
+      health_multiplier: 1.0,
+      attack_multiplier: 1.0,
+      defense_multiplier: 1.0,
+    },
+    rewards: { health: 15, attack: 2 },
+  },
+  hard: {
+    player: {
+      health: MAX_HEALTH - 20,
+      attack: PLAYER_BASE_ATTACK - 3,
+      defense: PLAYER_BASE_DEFENSE - 2,
+    },
+    enemy: {
+      health_multiplier: 1.4,
+      attack_multiplier: 1.3,
+      defense_multiplier: 1.3,
+    },
+    rewards: { health: 10, attack: 1 },
+  },
 };
 
-const HEALTH_THRESHOLDS = {
-	HIGH: 60,
-	MEDIUM: 30
+// ---------------- UI Helpers ----------------
+const $text = () => document.getElementById("game-text");
+const $input = () => document.getElementById("text-input");
+const $buttons = () => document.getElementById("button-container");
+
+function clearScreen() {
+  $text().textContent = "";
+}
+
+function printLine(text) {
+  const el = $text();
+  el.textContent += text + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function weightedChoice(choices, weights) {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < choices.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return choices[i];
+  }
+  return choices[choices.length - 1];
+}
+
+// ---------------- Input Handling ----------------
+const gameState = {
+  waiting: false,
+  resolver: null,
+  valid: [],
+  useText: false,
 };
 
-// ============================================================
-// CLASSES
-// ============================================================
-
-class Character {
-	constructor(name, health, attack, defense) {
-		this.name = name;
-		this.health = health;
-		this.maxHealth = health;
-		this.attack = attack;
-		this.defense = defense;
-	}
-
-	get isAlive() {
-		return this.health > 0;
-	}
-
-	get healthPercent() {
-		return (this.health / this.maxHealth) * 100;
-	}
-
-	takeDamage(amount) {
-		this.health = Math.max(0, this.health - amount);
-		return this.health;
-	}
-
-	heal(amount) {
-		this.health = Math.min(this.maxHealth, this.health + amount);
-	}
+function showButtons(options) {
+  const container = $buttons();
+  container.innerHTML = "";
+  options.forEach((opt) => {
+    const b = document.createElement("button");
+    b.textContent = opt[0].toUpperCase() + opt.slice(1);
+    b.addEventListener("click", () => resolveInput(opt));
+    container.appendChild(b);
+  });
 }
 
-class Player extends Character {
-	constructor(name, difficulty) {
-		const difficultyConfig = CONFIG.DIFFICULTY[difficulty];
-		const health = CONFIG.MAX_HEALTH + difficultyConfig.healthBonus;
-		const attack = CONFIG.PLAYER_BASE_ATTACK + difficultyConfig.attackBonus;
-		const defense = CONFIG.PLAYER_BASE_DEFENSE + difficultyConfig.defenseBonus;
+function getUserInput(prompt, validInputs = [], useText = false) {
+  return new Promise((resolve) => {
+    if (prompt) printLine(prompt);
+    gameState.waiting = true;
+    gameState.resolver = resolve;
+    gameState.valid = validInputs;
+    gameState.useText = useText;
 
-		super(name, health, attack, defense);
-		this.difficulty = difficulty;
-		this.level = 1;
-	}
+    const input = $input();
+    const container = $buttons();
+    container.innerHTML = "";
 
-	levelUp() {
-		this.level++;
-		const difficultyConfig = CONFIG.DIFFICULTY[this.difficulty];
-		this.attack += difficultyConfig.attackGain;
-		this.heal(difficultyConfig.healthRecovery);
-	}
+    if (useText || validInputs.length === 0) {
+      input.classList.remove("hidden");
+      input.focus();
+    } else {
+      input.classList.add("hidden");
+      showButtons(validInputs);
+    }
+  });
 }
 
-class Enemy extends Character {
-	constructor(name, health, attack, defense, aggression, difficulty) {
-		const difficultyMultiplier = CONFIG.ENEMY_DIFFICULTY[difficulty];
+function resolveInput(value) {
+  if (!gameState.waiting) return;
+  gameState.waiting = false;
 
-		const adjustedHealth = Math.floor(
-			health * difficultyMultiplier.healthMultiplier
-		);
-		const adjustedAttack = Math.floor(
-			attack * difficultyMultiplier.attackMultiplier
-		);
-		const adjustedDefense = Math.floor(
-			defense * difficultyMultiplier.defenseMultiplier
-		);
-
-		super(name, adjustedHealth, adjustedAttack, adjustedDefense);
-		this.aggression = aggression;
-	}
-
-	chooseAction() {
-		const healthPercent = this.healthPercent;
-		let attackChance;
-
-		if (healthPercent > HEALTH_THRESHOLDS.HIGH) {
-			attackChance = this.aggression;
-		} else if (healthPercent > HEALTH_THRESHOLDS.MEDIUM) {
-			attackChance = this.aggression * 0.7;
-		} else {
-			attackChance = this.aggression > 70 ? 90 : 30;
-		}
-
-		return Math.random() * 100 < attackChance ? "attack" : "defend";
-	}
+  const res = gameState.resolver;
+  gameState.resolver = null;
+  $buttons().innerHTML = "";
+  $input().classList.add("hidden");
+  $input().value = "";
+  res(value.toLowerCase());
 }
 
-// ============================================================
-// GAME STATE MANAGER
-// ============================================================
-
-class GameState {
-	constructor() {
-		this.player = null;
-		this.defeatedEnemies = new Set();
-		this.currentEnemy = null;
-		this.difficulty = null;
-	}
-
-	reset() {
-		this.player = null;
-		this.defeatedEnemies.clear();
-		this.currentEnemy = null;
-		this.difficulty = null;
-	}
-
-	setDifficulty(difficulty) {
-		this.difficulty = difficulty;
-	}
-
-	setPlayer(name) {
-		this.player = new Player(name, this.difficulty);
-	}
-
-	defeatEnemy(direction) {
-		this.defeatedEnemies.add(direction);
-	}
-
-	hasDefeated(direction) {
-		return this.defeatedEnemies.has(direction);
-	}
-
-	get allEnemiesDefeated() {
-		return this.defeatedEnemies.size === 4;
-	}
-
-	get defeatedEnemyNames() {
-		return Array.from(this.defeatedEnemies).map(
-			(dir) => dir.charAt(0).toUpperCase() + dir.slice(1)
-		);
-	}
+function handleTextEnter() {
+  if (!gameState.waiting) return;
+  const value = $input().value.trim();
+  if (!value) return;
+  const lower = value.toLowerCase();
+  if (gameState.valid.length && !gameState.valid.includes(lower)) {
+    printLine("Invalid input. Please try again.");
+    $input().value = "";
+    return;
+  }
+  resolveInput(lower);
 }
 
-// ============================================================
-// UI MANAGER
-// ============================================================
+document.getElementById("text-input").addEventListener("keypress", (e) => {
+  if (e.key === "Enter") handleTextEnter();
+});
 
-class UIManager {
-	constructor() {
-		this.gameText = document.getElementById("game-text");
-		this.textInput = document.getElementById("text-input");
-		this.buttonContainer = document.getElementById("button-container");
-	}
-
-	print(text) {
-		this.gameText.insertAdjacentHTML("beforeend", `${text}\n`);
-		this.gameText.scrollTop = this.gameText.scrollHeight;
-	}
-
-	clear() {
-		this.gameText.innerHTML = "";
-	}
-
-	showButtons(buttons) {
-		const fragment = document.createDocumentFragment();
-
-		buttons.forEach(({ text, callback, className = "" }) => {
-			const button = document.createElement("button");
-			button.textContent = text;
-			button.onclick = callback;
-			if (className) button.className = className;
-			fragment.appendChild(button);
-		});
-
-		this.buttonContainer.innerHTML = "";
-		this.buttonContainer.appendChild(fragment);
-	}
-
-	showTextInput(callback) {
-		this.textInput.classList.remove("hidden");
-		this.textInput.value = "";
-		this.textInput.focus();
-
-		const handleSubmit = () => {
-			const value = this.textInput.value.trim();
-			if (value) {
-				this.textInput.classList.add("hidden");
-				this.textInput.onkeypress = null;
-				callback(value);
-			}
-		};
-
-		this.showButtons([
-			{
-				text: "Submit",
-				callback: handleSubmit
-			}
-		]);
-
-		this.textInput.onkeypress = (e) => {
-			if (e.key === "Enter") handleSubmit();
-		};
-	}
-
-	hideInputs() {
-		this.textInput.classList.add("hidden");
-		this.buttonContainer.innerHTML = "";
-	}
-
-	showHealthStatus(player, enemy, enemyHealth) {
-		this.print(`\n${player.name}'s health: ${player.health}`);
-		this.print(`${enemy.name}'s health: ${enemyHealth}`);
-	}
+async function validateInput(prompt, valid) {
+  while (true) {
+    const ans = await getUserInput(prompt, valid);
+    if (valid.includes(ans)) return ans;
+    printLine("Invalid input. Please try again.");
+  }
 }
 
-// ============================================================
-// COMBAT SYSTEM
-// ============================================================
-
-class CombatSystem {
-	static calculateDamage(attackerPower, defenderDefense) {
-		const baseDamage = attackerPower - Math.floor(defenderDefense / 2);
-		const { min, max } = CONFIG.DAMAGE_VARIANCE;
-		const variance = Math.floor(baseDamage * (min + Math.random() * (max - min)));
-		return Math.max(variance, CONFIG.MIN_DAMAGE);
-	}
-
-	static processCombatRound(
-		playerAction,
-		enemyAction,
-		player,
-		enemy,
-		enemyHealth
-	) {
-		const results = {
-			playerDamage: 0,
-			enemyDamage: 0,
-			message: [],
-			enemyDefeated: false,
-			playerDefeated: false
-		};
-
-		if (playerAction === "attack" && enemyAction === "attack") {
-			results.playerDamage = this.calculateDamage(player.attack, enemy.defense);
-			results.enemyDamage = this.calculateDamage(enemy.attack, player.defense);
-
-			enemyHealth -= results.playerDamage;
-			results.message.push(
-				`${player.name} attacked and dealt ${results.playerDamage} damage!`
-			);
-
-			if (enemyHealth <= 0) {
-				results.enemyDefeated = true;
-				results.message.push(
-					`The ${enemy.name} has been defeated! You gain experience and rest!`
-				);
-			} else {
-				player.takeDamage(results.enemyDamage);
-				results.message.push(
-					`The ${enemy.name} attacked back and dealt ${results.enemyDamage} damage!`
-				);
-			}
-		} else if (playerAction === "attack" && enemyAction === "defend") {
-			const fullDamage = this.calculateDamage(player.attack, enemy.defense);
-			results.playerDamage = Math.floor(fullDamage / 2);
-			results.enemyDamage = Math.floor(enemy.attack / 3);
-
-			enemyHealth -= results.playerDamage;
-			player.takeDamage(results.enemyDamage);
-
-			results.message.push(
-				`${player.name} attacked for ${fullDamage} damage!`,
-				`The ${enemy.name} raised its guard and blocked most of it! Only took ${results.playerDamage} damage.`,
-				`Its counterattack dealt ${results.enemyDamage} damage to you!`
-			);
-
-			if (enemyHealth <= 0) {
-				results.enemyDefeated = true;
-				results.message.push(
-					`The ${enemy.name} has been defeated! You gain experience and rest!`
-				);
-			}
-		} else if (playerAction === "defend" && enemyAction === "attack") {
-			const fullDamage = this.calculateDamage(enemy.attack, player.defense);
-			results.enemyDamage = Math.floor(fullDamage / 2);
-			results.playerDamage = Math.floor(player.attack / 3);
-
-			player.takeDamage(results.enemyDamage);
-			enemyHealth -= results.playerDamage;
-
-			results.message.push(
-				`${player.name} raised their guard!`,
-				`The ${enemy.name} attacked for ${fullDamage} damage, but you blocked most of it!`,
-				`You took ${results.enemyDamage} damage and countered for ${results.playerDamage} damage!`
-			);
-		} else {
-			const exhaustionDamage = 2;
-			player.takeDamage(exhaustionDamage);
-			enemyHealth -= exhaustionDamage;
-
-			results.message.push(
-				`${player.name} and the ${enemy.name} both brace for impact!`,
-				`You circle each other warily. Both take ${exhaustionDamage} damage from exhaustion.`
-			);
-		}
-
-		results.playerDefeated = !player.isAlive;
-		results.enemyHealth = enemyHealth;
-
-		return results;
-	}
+// ---------------- Data Models ----------------
+class Player {
+  constructor(name, difficulty) {
+    this.name = name;
+    this.difficulty = difficulty;
+    const stats = DIFFICULTY_SETTINGS[difficulty].player;
+    this.health = Math.trunc(stats.health);
+    this.attack = Math.trunc(stats.attack);
+    this.defense = Math.trunc(stats.defense);
+    this.max_health = this.health;
+    this.level = 1;
+  }
 }
 
-// ============================================================
-// ENEMY & SCENARIO DATA
-// ============================================================
+class Enemy {
+  constructor({ name, max_health, attack, defense, aggression }) {
+    this.name = name;
+    this.max_health = max_health;
+    this.attack = attack;
+    this.defense = defense;
+    this.aggression = aggression;
+  }
 
-function createEnemies(difficulty) {
-	return {
-		north: new Enemy("Bear", 50, 15, 3, 75, difficulty),
-		east: new Enemy("Bandit Leader", 70, 18, 5, 60, difficulty),
-		south: new Enemy("Cave Troll", 90, 22, 8, 85, difficulty),
-		west: new Enemy("Dragon", 150, 28, 10, 50, difficulty)
-	};
+  static fromConfig(config, difficulty) {
+    const m = DIFFICULTY_SETTINGS[difficulty].enemy;
+    return new Enemy({
+      name: config.name,
+      max_health: Math.trunc(config.base_health * m.health_multiplier),
+      attack: Math.trunc(config.base_attack * m.attack_multiplier),
+      defense: Math.trunc(config.base_defense * m.defense_multiplier),
+      aggression: config.aggression,
+    });
+  }
 }
 
-const SCENARIOS = {
-	north: `
-	You enter the dense forest.
-The air is thick with the scent of pine and damp earth.
-As you walk deeper, you hear rustling in the bushes.
-You try to ignore it and decide to keep walking. 
-Before you can take another step, out lunges a wild bear!
-It's hungry as heck and you look delicious!
-`,
-	east: `
-	As you head towards the distant village,
-following the trail of smoke, you notice something alarming:
-the village is under attack by a group of bandits!
-	Their leader gestures to his gang, and they quickly encircle you both.
-Their chants of 'FIGHT! FIGHT! FIGHT!' echo through the air.`,
-	south: `
-	You enter the mysterious cave.
-The air is cool and damp, with faint echoes bouncing off the walls.
-As you venture deeper, you notice glowing crystals illuminating the path.
-You start to feel uneasy, so you turn around to leave.
-You turn and find yourself face to face with a troll!
-	'Your bones will make a great addition to my collection!'`,
-	west: `
-	You start your ascent up the steep mountain path.
-The higher you climb, the more breathtaking the view becomes.
-After a challenging climb, you reach a serene mountaintop lake.
-	The air grows suddenly cold.
-The wind picks up, carrying a bone-chilling roar that echoes through the peaks.
-Your heart pounds as a colossal shadow blots out the sun.
-With a thunderous crash, a dragon descends from the swirling clouds,
-its scales gleaming ominously. Its piercing eyes lock onto you,
-and its wings cast a dark shadow over the lake.
-The ground trembles beneath its massive claws as it emits a low, rumbling growl.
-
-You ready your weapon`
+const BASE_ENCOUNTERS = {
+  north: {
+    name: "Bear",
+    base_health: 50,
+    base_attack: 15,
+    base_defense: 3,
+    aggression: 75,
+    crossroad_description:
+      "To the North:\tYou see a dense forest stretching as far as the eye can see.",
+    intro_text:
+      "\n\tYou enter the dense forest.\n" +
+      "The air is thick with the scent of pine and damp earth.\n" +
+      "As you walk deeper, you hear rustling in the bushes.\n" +
+      "You try to ignore it and decide to keep walking. \n" +
+      "Before you can take another step, out lunges a wild bear!\n" +
+      "It's hungry as heck and you look delicious!\n",
+    victory_text:
+      "Feeling triumphant after defeating the bear, you continue your journey.\n",
+    defeat_text:
+      "The bear's attack overwhelms you.\n" +
+      "You hear the bear say a prayer, thanking his bear deity for this delicious feast.\n",
+    defeat_followup_prompt: "[Press ENTER to say 'Amen' with the bear]",
+    defeat_followup_text: "You can't talk. The bear ripped your throat out.\n\tBummer.",
+  },
+  east: {
+    name: "Bandit Leader",
+    base_health: 70,
+    base_attack: 18,
+    base_defense: 5,
+    aggression: 60,
+    crossroad_description:
+      "To the East:\tYou see smoke rising from a distant village.",
+    intro_text:
+      "\n\tAs you head towards the distant village,\n" +
+      "following the trail of smoke, you notice something alarming:\n" +
+      "the village is under attack by a group of bandits!\n" +
+      "\tTheir leader gestures to his gang, and they quickly encircle you both.\n" +
+      "Their chants of 'FIGHT! FIGHT! FIGHT!' echo through the air.",
+    victory_text:
+      "With the bandit leader defeated, the villagers thank you and you continue your journey.\n",
+    defeat_text:
+      "The bandit leader lands his final blow. The bandits fight over who gets to keep your sweet loot.\n" +
+      "You try to get up and retreat, but the bandits stole your feet.",
+  },
+  south: {
+    name: "Cave Troll",
+    base_health: 90,
+    base_attack: 22,
+    base_defense: 8,
+    aggression: 85,
+    crossroad_description:
+      "To the South:\tYou see a mysterious cave entrance beckoning with an eerie glow.",
+    intro_text:
+      "\n\tYou enter the mysterious cave.\n" +
+      "The air is cool and damp, with faint echoes bouncing off the walls.\n" +
+      "As you venture deeper, you notice glowing crystals illuminating the path.\n" +
+      "You start to feel uneasy, so you turn around to leave.\n" +
+      "You turn and find yourself face to face with a troll!\n" +
+      "\t'Your bones will make a great addition to my collection!'",
+    victory_text:
+      "The defeated troll slumps to the ground, allowing you to proceed deeper into the cave.\n",
+    defeat_text:
+      "The troll's brute strength overwhelms you.\n" +
+      "You attempt to retreat from the cave to die in peace, but you are trapped.\n\n" +
+      "Your bones join the pile of hundreds of other stupid...\nI mean...\nbrave...\nadventurers.",
+  },
+  west: {
+    name: "Dragon",
+    base_health: 150,
+    base_attack: 28,
+    base_defense: 10,
+    aggression: 50,
+    crossroad_description:
+      "To the West:\tYou see a narrow path leading up a steep mountain.",
+    intro_text:
+      "\n\tYou start your ascent up the steep mountain path.\n" +
+      "The higher you climb, the more breathtaking the view becomes.\n" +
+      "After a challenging climb, you reach a serene mountaintop lake.\n" +
+      "\tThe air grows suddenly cold.\n" +
+      "The wind picks up, carrying a bone-chilling roar that echoes through the peaks.\n" +
+      "Your heart pounds as a colossal shadow blots out the sun.\n" +
+      "With a thunderous crash, a dragon descends from the swirling clouds,\n" +
+      "its scales gleaming ominously. Its piercing eyes lock onto you,\n" +
+      "and its wings cast a dark shadow over the lake.\n" +
+      "The ground trembles beneath its massive claws as it emits a low, rumbling growl.\n\n" +
+      "You ready your weapon",
+    victory_text:
+      "Filled with adrenaline from defeating the dragon, you continue your journey.\n",
+    defeat_text:
+      "The dragon's fire leaves you badly burned. You retreat from the mountain to die in peace.\n",
+  },
 };
 
-const VICTORY_MESSAGES = {
-	Bear:
-		"Feeling triumphant after defeating the bear, you continue your journey.",
-	Dragon:
-		"Filled with adrenaline from defeating the dragon, you continue your journey.",
-	"Cave Troll":
-		"The defeated troll slumps to the ground, allowing you to proceed deeper into the cave.",
-	"Bandit Leader":
-		"With the bandit leader defeated, the villagers thank you and you continue your journey."
+const MARCUS_ROCK_ENCOUNTER = {
+  name: "Rock",
+  base_health: 500,
+  base_attack: 0,
+  base_defense: 0,
+  aggression: 0,
+  crossroad_description:
+    "To the Campfire:\tYou see a cozy campfire with your best friend Robert.",
+  intro_text:
+    "\n\tYou are sitting around a campfire, just living your best wormy acetomenotistic life with your best friend Robert. " +
+    "You notice something is off but you can't put your freakishly long finger on it. After a brief moment of hypervigilance, " +
+    "something catches your big ol' eye. There's something about that rock. That rock right there. It's... It's... IT'S PISSING YOU OFF! " +
+    "You tell Robert but he is of little help. You are left with no other choice than to give that stupid smug little stupid smug rock a piece of your mind.\n",
+  victory_text:
+    "The rock crumbles into dust.\nRobert looks at you with concern.\n'You okay, buddy?' he asks.\nYou feel strangely satisfied.\n",
+  defeat_text:
+    "You somehow died fighting a rock.\nA ROCK.\nRobert will never let you live this down.\n...Oh wait, you're dead.\n",
 };
 
-const DEFEAT_MESSAGES = {
-	Bear: {
-		initial:
-			"The bear's attack overwhelms you.\nYou hear the bear say a prayer, thanking his bear deity for this delicious feast.",
-		prompt: "[Press button to say 'Amen' with the bear]",
-		final: "You can't talk. The bear ripped your throat out.\n\tBummer."
-	},
-	Dragon: {
-		initial:
-			"The dragon's fire leaves you badly burned. You retreat from the mountain to die in peace."
-	},
-	"Cave Troll": {
-		initial:
-			"The troll's brute strength overwhelms you.\nYou attempt to retreat from the cave to die in peace, but you are trapped.\n\nYour bones join the pile of hundreds of other stupid...\nI mean...\nbrave...\nadventurers."
-	},
-	"Bandit Leader": {
-		initial:
-			"The bandit leader lands his final blow. The bandits fight over who gets to keep your sweet loot.\nYou try to get up and retreat, but the bandits stole your feet."
-	}
-};
-
-// ============================================================
-// GAME CONTROLLER
-// ============================================================
-
-class GameController {
-	constructor() {
-		this.state = new GameState();
-		this.ui = new UIManager();
-		this.enemies = null;
-	}
-
-	start() {
-		this.ui.print(`
-*******************************************
-*******************************************
-******* Welcome to the Epic Adventure! ***
-*******************************************
-*******************************************
-        `);
-
-		this.ui.showButtons([
-			{
-				text: "Press Enter to continue...",
-				callback: () => this.promptDifficulty()
-			}
-		]);
-	}
-
-	promptDifficulty() {
-		this.ui.clear();
-		this.ui.print("\n" + "=".repeat(50));
-		this.ui.print("SELECT YOUR DIFFICULTY:");
-		this.ui.print("=".repeat(50));
-		this.ui.print("\nChoose your difficulty:");
-
-		this.ui.showButtons([
-			{
-				text: "Easy",
-				callback: () => this.setDifficulty("easy")
-			},
-			{
-				text: "Medium",
-				callback: () => this.setDifficulty("medium")
-			},
-			{
-				text: "Hard",
-				callback: () => this.setDifficulty("hard")
-			}
-		]);
-	}
-
-	setDifficulty(difficulty) {
-		this.state.setDifficulty(difficulty);
-		this.enemies = createEnemies(difficulty);
-		this.ui.clear();
-		this.ui.print(`Difficulty set to: ${difficulty.toUpperCase()}`);
-		this.promptPlayerName();
-	}
-
-	promptPlayerName() {
-		this.ui.print("\nWhat is your name?");
-		this.ui.showTextInput((name) => {
-			this.state.setPlayer(name);
-			this.showIntroduction();
-		});
-	}
-
-	showIntroduction() {
-		this.ui.clear();
-		const { player } = this.state;
-		this.ui.print(
-			`\nHello ${player.name}.\n\nYou find yourself suddenly teleported to an unfamiliar crossroad surrounded by four different paths.\n`
-		);
-		this.ui.print(
-			"To the North:\tYou see a dense forest stretching as far as the eye can see."
-		);
-		this.ui.print("To the East:\tYou see smoke rising from a distant village.");
-		this.ui.print(
-			"To the South:\tYou see a mysterious cave entrance beckoning with an eerie glow."
-		);
-		this.ui.print(
-			"To the West:\tYou see a narrow path leading up a steep mountain.\n"
-		);
-
-		this.ui.showButtons([
-			{
-				text: "Continue",
-				callback: () => this.showDirectionChoice()
-			}
-		]);
-	}
-
-	showDirectionChoice() {
-		if (this.state.allEnemiesDefeated) {
-			this.handleVictory();
-			return;
-		}
-
-		this.ui.clear();
-		const { player } = this.state;
-		this.ui.print(
-			`\nHello ${player.name}.\n\nYou find yourself at the crossroad surrounded by four different paths.\n`
-		);
-		this.ui.print(
-			"To the North:\tYou see a dense forest stretching as far as the eye can see."
-		);
-		this.ui.print("To the East:\tYou see smoke rising from a distant village.");
-		this.ui.print(
-			"To the South:\tYou see a mysterious cave entrance beckoning with an eerie glow."
-		);
-		this.ui.print(
-			"To the West:\tYou see a narrow path leading up a steep mountain.\n"
-		);
-
-		if (this.state.defeatedEnemies.size > 0) {
-			this.ui.print(
-				`Defeated enemies: ${this.state.defeatedEnemyNames.join(", ")}\n`
-			);
-		}
-
-		this.ui.print(
-			"Which direction will you choose? (North / East / South / West)\n"
-		);
-
-		const buttons = Object.keys(this.enemies).map((direction) => ({
-			text: direction.charAt(0).toUpperCase() + direction.slice(1),
-			callback: () => this.handleDirectionChoice(direction)
-		}));
-
-		this.ui.showButtons(buttons);
-	}
-
-	handleDirectionChoice(direction) {
-		if (this.state.hasDefeated(direction)) {
-			this.ui.clear();
-			this.ui.print(
-				"You've already defeated that enemy. Choose another direction.\n"
-			);
-			this.ui.showButtons([
-				{
-					text: "Continue",
-					callback: () => this.showDirectionChoice()
-				}
-			]);
-			return;
-		}
-
-		const enemy = this.enemies[direction];
-		const scenario = SCENARIOS[direction];
-		this.startScenario(enemy, scenario, direction);
-	}
-
-	startScenario(enemy, scenarioText, direction) {
-		this.ui.clear();
-		this.ui.print(scenarioText);
-		this.ui.showButtons([
-			{
-				text: "Continue",
-				callback: () => this.startCombat(enemy, direction)
-			}
-		]);
-	}
-
-	startCombat(enemy, direction) {
-		let enemyHealth = enemy.maxHealth;
-
-		const combatRound = () => {
-			this.ui.clear();
-			this.ui.showHealthStatus(this.state.player, enemy, enemyHealth);
-
-			this.ui.showButtons([
-				{ text: "1. Attack", callback: () => processTurn("attack") },
-				{ text: "2. Defend", callback: () => processTurn("defend") }
-			]);
-		};
-
-		const processTurn = (playerAction) => {
-			this.ui.clear();
-			this.ui.showHealthStatus(this.state.player, enemy, enemyHealth);
-
-			const enemyAction = enemy.chooseAction();
-			const results = CombatSystem.processCombatRound(
-				playerAction,
-				enemyAction,
-				this.state.player,
-				enemy,
-				enemyHealth
-			);
-
-			this.ui.print("\n" + results.message.join("\n"));
-			enemyHealth = results.enemyHealth;
-
-			if (results.enemyDefeated) {
-				this.handleCombatVictory(enemy, direction);
-			} else if (results.playerDefeated) {
-				this.handleCombatDefeat(enemy);
-			} else {
-				this.ui.showButtons([
-					{
-						text: "Continue",
-						callback: combatRound
-					}
-				]);
-			}
-		};
-
-		combatRound();
-	}
-
-	handleCombatVictory(enemy, direction) {
-		this.state.player.levelUp();
-		this.ui.clear();
-		this.ui.print(`${VICTORY_MESSAGES[enemy.name]}\n`);
-
-		this.ui.showButtons([
-			{
-				text: "Continue",
-				callback: () => {
-					this.state.defeatEnemy(direction);
-					this.showDirectionChoice();
-				}
-			}
-		]);
-	}
-
-	handleCombatDefeat(enemy) {
-		this.ui.clear();
-		const defeatMsg = DEFEAT_MESSAGES[enemy.name];
-		this.ui.print(`\n${defeatMsg.initial}\n`);
-
-		if (enemy.name === "Bear") {
-			this.ui.print(defeatMsg.prompt);
-			this.ui.showButtons([
-				{
-					text: "Amen",
-					callback: () => {
-						this.ui.clear();
-						this.ui.print(defeatMsg.final);
-						this.showGameOver();
-					}
-				}
-			]);
-		} else {
-			this.showGameOver();
-		}
-	}
-
-	showGameOver() {
-		this.ui.print("\nUnfortunately, your adventure has come to an end.\n");
-		this.ui.showButtons([
-			{
-				text: "Press ENTER to die",
-				callback: () => {
-					this.ui.clear();
-					this.ui.print("\nx_x You died.\n");
-					this.ui.showButtons([
-						{
-							text: "Exit",
-							callback: () => {
-								this.ui.print("\nGame Over. Refresh to play again!");
-								this.ui.hideInputs();
-							}
-						}
-					]);
-				}
-			}
-		]);
-	}
-
-	handleVictory() {
-		this.ui.clear();
-		const { player } = this.state;
-		this.ui.print(
-			`\nCongratulations ${
-				player.name
-			}!!! You have defeated all the enemies and completed the epic adventure on ${this.state.difficulty.toUpperCase()} mode!\n`
-		);
-		this.ui.showButtons([
-			{
-				text: "Press ENTER to end game and get back to your life, loser.",
-				callback: () => {
-					this.ui.print("\nThanks for playing!");
-					this.ui.hideInputs();
-				}
-			}
-		]);
-	}
+// ---------------- Combat Logic ----------------
+function calculateDamage(attackerPower, defenderDefense) {
+  const base = Math.max(attackerPower - Math.floor(defenderDefense / 2), 1);
+  const minimum = Math.max(Math.floor(base * 0.85), 1);
+  const maximum = Math.max(Math.floor(base * 1.15), minimum);
+  const dmg = randomInt(minimum, maximum);
+  return Math.max(dmg, 3);
 }
 
-// ============================================================
-// INITIALIZE GAME
-// ============================================================
-
-const game = new GameController();
-
-if (document.readyState === "loading") {
-	document.addEventListener("DOMContentLoaded", () => game.start());
-} else {
-	game.start();
+function enemyChooseAction(enemy, enemyHealth) {
+  if (enemy.name === "Rock") return "defend";
+  const pct = (enemyHealth / enemy.max_health) * 100;
+  let atk, def;
+  if (pct > 60) {
+    atk = enemy.aggression;
+    def = 100 - enemy.aggression;
+  } else if (pct > 30) {
+    atk = enemy.aggression * 0.7;
+    def = 100 - atk;
+  } else {
+    if (enemy.aggression > 70) {
+      atk = 90;
+      def = 10;
+    } else {
+      atk = 30;
+      def = 70;
+    }
+  }
+  return weightedChoice(["attack", "defend"], [atk, def]);
 }
+
+function printHealthStatus(player, enemyName, enemyHealth) {
+  printLine(`\n${player.name}'s health: ${player.health}`);
+  printLine(`${enemyName}'s health: ${enemyHealth}`);
+}
+
+function applyVictoryRewards(player) {
+  const r = DIFFICULTY_SETTINGS[player.difficulty].rewards;
+  player.health = Math.min(player.health + Math.trunc(r.health), player.max_health);
+  player.attack += Math.trunc(r.attack);
+  player.level += 1;
+}
+
+async function handleEnemyDefeat(player, enemyName) {
+  printLine(`The ${enemyName} has been defeated! You gain experience and rest!\n`);
+  applyVictoryRewards(player);
+  await getUserInput("[Continue]", ["continue"]);
+}
+
+async function playerAttackRound(player, enemy, enemyHealth, enemyAction) {
+  const log = [];
+  const playerDamage = calculateDamage(player.attack, enemy.defense);
+
+  if (enemyAction === "attack") {
+    enemyHealth -= playerDamage;
+    log.push(`${player.name} attacked and dealt ${playerDamage} damage!`);
+    if (enemyHealth <= 0) return { enemyHealth, defeated: true, log };
+
+    const enemyDamage = calculateDamage(enemy.attack, player.defense);
+    player.health -= enemyDamage;
+    log.push(`The ${enemy.name} attacked back and dealt ${enemyDamage} damage!`);
+    return { enemyHealth, defeated: false, log };
+  }
+
+  const reducedDamage = Math.floor(playerDamage / 2);
+  const counterDamage = Math.floor(enemy.attack / 3);
+  enemyHealth -= reducedDamage;
+  player.health -= counterDamage;
+
+  log.push(`${player.name} attacked for ${playerDamage} damage!`);
+  log.push(
+    `The ${enemy.name} raised its guard and blocked most of it! Only took ${reducedDamage} damage.`
+  );
+  log.push(`Its counterattack dealt ${counterDamage} damage to you!`);
+
+  return { enemyHealth, defeated: enemyHealth <= 0, log };
+}
+
+async function playerDefendRound(player, enemy, enemyHealth, enemyAction) {
+  const log = [];
+
+  if (enemyAction === "attack") {
+    const enemyDamage = calculateDamage(enemy.attack, player.defense);
+    const reduced = Math.floor(enemyDamage / 2);
+    const counter = Math.floor(player.attack / 3);
+
+    player.health -= reduced;
+    enemyHealth -= counter;
+
+    log.push(`${player.name} raised their guard!`);
+    log.push(
+      `The ${enemy.name} attacked for ${enemyDamage} damage, but you blocked most of it!`
+    );
+    log.push(`You took ${reduced} damage and countered for ${counter} damage!`);
+    return { enemyHealth, log };
+  }
+
+  player.health -= 2;
+  enemyHealth -= 2;
+
+  log.push(`${player.name} and the ${enemy.name} both brace for impact!`);
+  log.push(`You circle each other warily. Both take 2 damage from exhaustion.`);
+  return { enemyHealth, log };
+}
+
+async function fightEnemy(enemy, player) {
+  let enemyHealth = enemy.max_health;
+
+  while (enemyHealth > 0 && player.health > 0) {
+    clearScreen();
+    printHealthStatus(player, enemy.name, enemyHealth);
+
+    const choice = await validateInput("1. Attack   2. Defend\n> ", ["1", "2"]);
+    clearScreen();
+    printHealthStatus(player, enemy.name, enemyHealth);
+    printLine("");
+
+    const enemyAction = enemyChooseAction(enemy, enemyHealth);
+
+    if (choice === "1") {
+      const { enemyHealth: eh, defeated, log } = await playerAttackRound(
+        player,
+        enemy,
+        enemyHealth,
+        enemyAction
+      );
+      enemyHealth = eh;
+      log.forEach((m) => printLine(m));
+      if (defeated) {
+        await handleEnemyDefeat(player, enemy.name);
+        return "victory";
+      }
+    } else {
+      const { enemyHealth: eh, log } = await playerDefendRound(
+        player,
+        enemy,
+        enemyHealth,
+        enemyAction
+      );
+      enemyHealth = eh;
+      log.forEach((m) => printLine(m));
+    }
+
+    if (enemyHealth <= 0) {
+      await handleEnemyDefeat(player, enemy.name);
+      return "victory";
+    }
+
+    if (player.health <= 0) {
+      await getUserInput("[Continue]", ["continue"]);
+      return "game_over";
+    }
+
+    await getUserInput("[Continue]", ["continue"]);
+  }
+  return null;
+}
+
+async function scenario(player, encounter) {
+  const enemy = Enemy.fromConfig(encounter, player.difficulty);
+  clearScreen();
+  printLine(encounter.intro_text);
+  await getUserInput("[Continue]", ["continue"]);
+  const result = await fightEnemy(enemy, player);
+
+  clearScreen();
+  if (result === "victory") {
+    printLine(encounter.victory_text);
+    await getUserInput("[Continue]", ["continue"]);
+    return "victory";
+  }
+  if (result === "game_over") {
+    printLine(encounter.defeat_text);
+    if (encounter.defeat_followup_prompt) {
+      await getUserInput(encounter.defeat_followup_prompt, ["continue"]);
+      if (encounter.defeat_followup_text) {
+        printLine(encounter.defeat_followup_text);
+      }
+    }
+    await getUserInput("[Continue]", ["continue"]);
+    return "game_over";
+  }
+  return result;
+}
+
+function describeCrossroad(player, encounters, defeated, introTemplate) {
+  const pathCount = encounters.campfire ? "five" : "four";
+  printLine(`\nHello ${player.name}.\n`);
+  printLine(introTemplate.replace("{path_count}", pathCount));
+  Object.keys(encounters).forEach((dir) => {
+    printLine(encounters[dir].crossroad_description);
+  });
+  printLine("");
+  if (defeated.length) {
+    printLine(`Defeated enemies: ${defeated.join(", ")}\n`);
+  }
+}
+
+function buildDirectionPrompt(encounters) {
+  const options = Object.keys(encounters)
+    .map((d) => d[0].toUpperCase() + d.slice(1))
+    .join(" / ");
+  return `Which direction will you choose? (${options})\n> `;
+}
+
+// ---------------- Main ----------------
+async function main() {
+  clearScreen();
+  printLine(`
+    *******************************************
+    *******************************************
+    ******* Welcome to the Epic Adventure! ***
+    *******************************************
+    *******************************************
+  `);
+  await getUserInput("Press Enter to continue...", ["continue"]);
+
+  // Difficulty
+  clearScreen();
+  printLine("\n" + "=".repeat(50));
+  printLine("SELECT YOUR DIFFICULTY:");
+  printLine("=".repeat(50));
+
+  const difficulty = await validateInput(
+    "\nChoose your difficulty (Easy / Medium / Hard)\n> ",
+    ["easy", "medium", "hard"]
+  );
+  printLine(`  Difficulty set to: ${difficulty.toUpperCase()}`);
+
+  const name = await getUserInput("\nWhat is your name?\n> ", [], true);
+  const player = new Player(name.trim(), difficulty);
+  clearScreen();
+
+  const isMarcus = player.name.toLowerCase() === "marcus";
+  const encounters = { ...BASE_ENCOUNTERS };
+  if (isMarcus) encounters.campfire = MARCUS_ROCK_ENCOUNTER;
+
+  const defeated = [];
+  let firstVisit = true;
+
+  while (true) {
+    if (defeated.length === Object.keys(encounters).length) {
+      clearScreen();
+      printLine(
+        `\nCongratulations ${player.name}!!! You have defeated all the enemies and completed the epic adventure on ${difficulty.toUpperCase()} mode!\n`
+      );
+      await getUserInput(
+        "Press ENTER to end game and get back to your life, loser.",
+        ["continue"]
+      );
+      break;
+    }
+
+    clearScreen();
+    const introTemplate = firstVisit
+      ? "You find yourself suddenly teleported to an unfamiliar crossroad surrounded by {path_count} different paths.\n"
+      : "You find yourself at the crossroad surrounded by {path_count} different paths.\n";
+    describeCrossroad(player, encounters, defeated, introTemplate);
+    firstVisit = false;
+
+    const dir = await validateInput(
+      buildDirectionPrompt(encounters),
+      Object.keys(encounters)
+    );
+
+    if (defeated.includes(dir)) {
+      printLine("You have already cleared this path. Try another direction.");
+      await getUserInput("[Continue]", ["continue"]);
+      continue;
+    }
+
+    const result = await scenario(player, encounters[dir]);
+    if (result === "victory") {
+      defeated.push(dir);
+    } else if (result === "game_over") {
+      clearScreen();
+      printLine("\nUnfortunately, your adventure has come to an end.\n");
+      await getUserInput("Press ENTER to die.", ["continue"]);
+      printLine("\nx_x You died.\n");
+      await getUserInput("Exit", ["exit"]);
+      break;
+    }
+  }
+}
+
+// Kick off
+window.addEventListener("load", () => {
+  main();
+});
