@@ -1,22 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Epic Adventure Game</title>
-	<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Epic Adventure Game</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-	<div id="game-container">
-		<div id="game-text"></div>
-		<div id="input-area">
-			<input type="text" id="text-input" class="hidden" placeholder="Type your answer...">
-			<div id="button-container"></div>
-		</div>
-	</div>
-	<script src="game.js"></script>
+  <div id="game-container" role="main" aria-labelledby="title">
+    <h1 id="title" class="sr-only">Epic Adventure Game</h1>
+    <div id="game-text" aria-live="polite" aria-atomic="false"></div>
+    <div id="input-area">
+      <input
+        type="text"
+        id="text-input"
+        class="hidden"
+        placeholder="Type your answer..."
+        autocomplete="off"
+        aria-label="Type your answer"
+      />
+      <div id="button-container" role="group" aria-label="Choices"></div>
+    </div>
+  </div>
+  <script src="script.js"></script>
 </body>
-
 </html>
