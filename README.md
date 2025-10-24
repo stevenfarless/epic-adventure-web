@@ -10,16 +10,9 @@ A browser-based port of my work-in-progress, text-only Python adventure game —
 ## What’s inside
 
 * **100% client-side**: vanilla HTML/CSS/JS, no build step required.
-* **Faithful port of game logic** from Python: difficulty presets, enemy aggression, damage variance, victory rewards, and the infamous “Marcus + Rock” encounter.
+* **Faithful port of game logic** from Python: difficulty presets, enemy aggression, damage variance, victory rewards.
 * **Simple, readable code** designed for extending encounters and tuning balance.
 * **Accessible UI**: ARIA live region for story text, keyboard-friendly inputs.
-
-```
-/
-├─ index.html      # App shell and UI
-├─ style.css       # Styling (keeps your original vibe, tightened)
-└─ script.js       # Full JS port of the new Python game
-```
 
 ---
 
@@ -73,7 +66,7 @@ BASE_ENCOUNTERS.northeast = {
 };
 ```
 
-> The game auto-lists directions from the keys of `BASE_ENCOUNTERS` (plus the campfire encounter when `name === "marcus"`). No extra wiring needed.
+> The game auto-lists directions from the keys of `BASE_ENCOUNTERS`. No extra wiring needed.
 
 ### Tweak difficulty
 
