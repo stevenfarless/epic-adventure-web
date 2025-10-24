@@ -1,4 +1,5 @@
 // ---------------- Constants & Settings ----------------
+
 const MAX_HEALTH = 100;
 const PLAYER_BASE_ATTACK = 15;
 const PLAYER_BASE_DEFENSE = 5;
@@ -46,6 +47,7 @@ const DIFFICULTY_SETTINGS = {
 };
 
 // ---------------- UI Helpers ----------------
+
 const $text = () => document.getElementById("game-text");
 const $input = () => document.getElementById("text-input");
 const $buttons = () => document.getElementById("button-container");
@@ -75,6 +77,7 @@ function weightedChoice(choices, weights) {
 }
 
 // ---------------- Input Handling ----------------
+
 const gameState = {
   waiting: false,
   resolver: null,
@@ -118,7 +121,6 @@ function getUserInput(prompt, validInputs = [], useText = false) {
 function resolveInput(value) {
   if (!gameState.waiting) return;
   gameState.waiting = false;
-
   const res = gameState.resolver;
   gameState.resolver = null;
   $buttons().innerHTML = "";
@@ -132,11 +134,13 @@ function handleTextEnter() {
   const value = $input().value.trim();
   if (!value) return;
   const lower = value.toLowerCase();
+
   if (gameState.valid.length && !gameState.valid.includes(lower)) {
     printLine("Invalid input. Please try again.");
     $input().value = "";
     return;
   }
+
   resolveInput(lower);
 }
 
@@ -153,6 +157,7 @@ async function validateInput(prompt, valid) {
 }
 
 // ---------------- Data Models ----------------
+
 class Player {
   constructor(name, difficulty) {
     this.name = name;
@@ -186,6 +191,8 @@ class Enemy {
     });
   }
 }
+
+// ---------------- Encounter Configs ----------------
 
 const BASE_ENCOUNTERS = {
   north: {
@@ -299,7 +306,36 @@ const MARCUS_ROCK_ENCOUNTER = {
     "You somehow died fighting a rock.\nA ROCK.\nRobert will never let you live this down.\n...Oh wait, you're dead.\n",
 };
 
+const ROBERT_CAMPFIRE_ENCOUNTER = {
+  name: "Marcus's Sanity",
+  base_health: 1,
+  base_attack: 0,
+  base_defense: 0,
+  aggression: 0,
+  crossroad_description:
+    "To the Campfire:\tYou see a cozy campfire with your best friend Marcus.",
+  intro_text:
+    "\n\tYou're relaxing by a warm campfire with your best friend Marcus, roasting marshmallows and enjoying the peaceful evening. " +
+    "The stars twinkle overhead, the fire crackles gently... it's perfect.\n\n" +
+    "\tThen Marcus stands up.\n\n" +
+    "He walks over to a nearby rock. A perfectly innocent rock. Without a word, without warning, " +
+    '\"Robert...\" Marcus mutters, \"I don\'t like that rock\"\n\n' +
+    "he raises his fist and slams it down onto the rock with the fury of a thousand suns.\n\n" +
+    '\"Take that, you smug little pebble!\" he says calm and monotone.\n\n' +
+    "You watch in stunned silence as Marcus proceeds to beat the everloving heck out of this poor innocent rock." +
+    "His fists are a blur. The rock doesn't stand a chance. Chunks of stone fly in every direction.\n\n" +
+    '\"It\'s pissing me off.\" Marcus mutters in his trademark sociopathic wormitude.\n\n',
+  victory_text:
+    "Marcus crawls out of the fire, singed but alive. He's coughing up smoke and his eyebrows are gone. Or did he even have any to begin with?\n" +
+    '\"Thanks... Robert\" he wheezes. \"You saved my life. That rock had it coming though.\"\n' +
+    "You both agree to never speak of this again. The adventure continues.\n",
+  defeat_text:
+    "You couldn't save him. Marcus remains in the fire, a monument to poor decision-making and rock-related rage.\n" +
+    'You continue your adventure alone, forever haunted by the memory of your friend\'s final words: \"It\'s pissing me off.\"\n',
+};
+
 // ---------------- Combat Logic ----------------
+
 function calculateDamage(attackerPower, defenderDefense) {
   const base = Math.max(attackerPower - Math.floor(defenderDefense / 2), 1);
   const minimum = Math.max(Math.floor(base * 0.85), 1);
@@ -310,8 +346,10 @@ function calculateDamage(attackerPower, defenderDefense) {
 
 function enemyChooseAction(enemy, enemyHealth) {
   if (enemy.name === "Rock") return "defend";
+
   const pct = (enemyHealth / enemy.max_health) * 100;
   let atk, def;
+
   if (pct > 60) {
     atk = enemy.aggression;
     def = 100 - enemy.aggression;
@@ -327,6 +365,7 @@ function enemyChooseAction(enemy, enemyHealth) {
       def = 70;
     }
   }
+
   return weightedChoice(["attack", "defend"], [atk, def]);
 }
 
@@ -355,6 +394,7 @@ async function playerAttackRound(player, enemy, enemyHealth, enemyAction) {
   if (enemyAction === "attack") {
     enemyHealth -= playerDamage;
     log.push(`${player.name} attacked and dealt ${playerDamage} damage!`);
+
     if (enemyHealth <= 0) return { enemyHealth, defeated: true, log };
 
     const enemyDamage = calculateDamage(enemy.attack, player.defense);
@@ -393,6 +433,7 @@ async function playerDefendRound(player, enemy, enemyHealth, enemyAction) {
       `The ${enemy.name} attacked for ${enemyDamage} damage, but you blocked most of it!`
     );
     log.push(`You took ${reduced} damage and countered for ${counter} damage!`);
+
     return { enemyHealth, log };
   }
 
@@ -401,8 +442,99 @@ async function playerDefendRound(player, enemy, enemyHealth, enemyAction) {
 
   log.push(`${player.name} and the ${enemy.name} both brace for impact!`);
   log.push(`You circle each other warily. Both take 2 damage from exhaustion.`);
+
   return { enemyHealth, log };
 }
+
+// ---------------- Special Robert Encounter ----------------
+
+async function robertWatchMarcusFight(player) {
+  let helpAttempts = 0;
+  const marcusPhrases = [
+    '\"Help me... Robert...\"',
+    '\"Robert... This hurts worse than getting shanked in the leg by Big Badinky Bones at Panera Bread.\"',
+    '\"Robert... Why did you allow me to yeet myself into this fire?\"',
+    '\"Robert... This fire is pissing me off.\"'
+  ];
+
+  // Phase 1: Watch Marcus beat up the rock
+  clearScreen();
+  printLine("\nMarcus is absolutely destroying this rock. Pebbles everywhere.\n");
+  printLine("His knuckles are bleeding. The rock is 50% dust now. He's not stopping.\n");
+  await getUserInput("[Continue]", ["continue"]);
+
+  clearScreen();
+  printLine("\nThe rock is now gravel. Marcus raises his arms in triumph.\n");
+  printLine('\"Victory...\" he says calmly and monotone to the heavens.\n');
+  printLine("\nThen... he looks at the campfire.\n");
+  await getUserInput("[Continue]", ["continue"]);
+
+  clearScreen();
+  printLine('\n\"The rock... it made me do terrible things,\" Marcus says.\n');
+  printLine('\"There\'s only one way to cleanse this guilt...\"\n');
+  printLine("\nBefore you can stop him, in a blind fit of the calmest, slowest, most uneccessary rage, he dives face first directly into the campfire.\n");
+  await getUserInput("[Continue]", ["continue"]);
+
+  // Phase 2: The rescue attempts
+  while (helpAttempts < 3) {
+    clearScreen();
+
+    if (helpAttempts === 0) {
+      printLine("\nMarcus is rolling around in the fire, screaming for help.\n");
+      printLine("The flames are everywhere. This is a disaster.\n");
+    } else if (helpAttempts === 1) {
+      printLine("\nMarcus is still in the fire. He's doing this weird flailing thing.\n");
+      printLine("Is he... is he swimming in the fire? That's not helping, Marcus.\n");
+    } else {
+      printLine("\nMarcus has given up flailing. He's just lying there dramatically.\n");
+      printLine("But he's still saying Robert. So at least he's alive.\n");
+    }
+
+    printLine(`\nMarcus: ${marcusPhrases[helpAttempts]}\n`);
+
+    const choice = await validateInput("1. Help Marcus\n2. Tell him to get out\n> ", ["1", "2"]);
+
+    clearScreen();
+
+    if (choice === "1") {
+      helpAttempts += 1;
+      if (helpAttempts < 3) {
+        printLine("\nYou reach toward the fire to help Marcus!\n");
+        printLine("\nBut the heat is too intense! You pull back, singed.\n");
+        printLine("Marcus continues writhing in the flames.\n");
+        await getUserInput("[Continue]", ["continue"]);
+      } else {
+        // Success!
+        printLine("\nWith a heroic burst of determination, you grab a nearby branch!\n");
+        printLine("You extend it to Marcus. He grabs hold!\n");
+        printLine("\nWith a mighty heave, you YANK Marcus out of the fire!\n");
+        printLine("He tumbles onto the ground, smoking and coughing.\n");
+        await getUserInput("[Continue]", ["continue"]);
+
+        clearScreen();
+        printLine('\nMarcus looks up at you with tears in his eyes.\n');
+        printLine('\"That rock... it was so smug, Robert. So smug.\"\n');
+        printLine("\nYou help him to his feet. His hair is mostly gone.\n");
+        printLine('\"We don\'t talk about this,\" you say firmly.\n');
+        printLine('\"Agreed,\" Marcus nods. \"What rock?\"\n');
+        await getUserInput("[Continue]", ["continue"]);
+
+        return "victory";
+      }
+    } else {
+      // choice === "2"
+      printLine('\n\"Marcus, just GET OUT!\" you yell.\n');
+      printLine("\nMarcus looks at you from the flames.\n");
+      printLine(`\nMarcus: ${marcusPhrases[Math.min(helpAttempts, marcusPhrases.length - 1)]}\n`);
+      printLine("\nYeah, that's not working.\n");
+      await getUserInput("[Continue]", ["continue"]);
+    }
+  }
+
+  return "victory";
+}
+
+// ---------------- Fight and Scenario Functions ----------------
 
 async function fightEnemy(enemy, player) {
   let enemyHealth = enemy.max_health;
@@ -412,6 +544,7 @@ async function fightEnemy(enemy, player) {
     printHealthStatus(player, enemy.name, enemyHealth);
 
     const choice = await validateInput("1. Attack   2. Defend\n> ", ["1", "2"]);
+
     clearScreen();
     printHealthStatus(player, enemy.name, enemyHealth);
     printLine("");
@@ -427,6 +560,7 @@ async function fightEnemy(enemy, player) {
       );
       enemyHealth = eh;
       log.forEach((m) => printLine(m));
+
       if (defeated) {
         await handleEnemyDefeat(player, enemy.name);
         return "victory";
@@ -454,14 +588,30 @@ async function fightEnemy(enemy, player) {
 
     await getUserInput("[Continue]", ["continue"]);
   }
+
   return null;
 }
 
 async function scenario(player, encounter) {
+  // Special handling for Robert's campfire encounter
+  if (encounter.name === "Marcus's Sanity") {
+    clearScreen();
+    printLine(encounter.intro_text);
+    await getUserInput("[Continue]", ["continue"]);
+    const result = await robertWatchMarcusFight(player);
+    clearScreen();
+    if (result === "victory") {
+      printLine(encounter.victory_text);
+      await getUserInput("[Continue]", ["continue"]);
+    }
+    return result;
+  }
+
   const enemy = Enemy.fromConfig(encounter, player.difficulty);
   clearScreen();
   printLine(encounter.intro_text);
   await getUserInput("[Continue]", ["continue"]);
+
   const result = await fightEnemy(enemy, player);
 
   clearScreen();
@@ -470,6 +620,7 @@ async function scenario(player, encounter) {
     await getUserInput("[Continue]", ["continue"]);
     return "victory";
   }
+
   if (result === "game_over") {
     printLine(encounter.defeat_text);
     if (encounter.defeat_followup_prompt) {
@@ -481,6 +632,7 @@ async function scenario(player, encounter) {
     await getUserInput("[Continue]", ["continue"]);
     return "game_over";
   }
+
   return result;
 }
 
@@ -488,10 +640,13 @@ function describeCrossroad(player, encounters, defeated, introTemplate) {
   const pathCount = encounters.campfire ? "five" : "four";
   printLine(`\nHello ${player.name}.\n`);
   printLine(introTemplate.replace("{path_count}", pathCount));
+
   Object.keys(encounters).forEach((dir) => {
     printLine(encounters[dir].crossroad_description);
   });
+
   printLine("");
+
   if (defeated.length) {
     printLine(`Defeated enemies: ${defeated.join(", ")}\n`);
   }
@@ -505,15 +660,16 @@ function buildDirectionPrompt(encounters) {
 }
 
 // ---------------- Main ----------------
+
 async function main() {
   clearScreen();
   printLine(`
-    *******************************************
-    *******************************************
-    ******* Welcome to the Epic Adventure! ***
-    *******************************************
-    *******************************************
-  `);
+*******************************************
+*******************************************
+******* Welcome to the Epic Adventure! ***
+*******************************************
+*******************************************
+`);
   await getUserInput("Press Enter to continue...", ["continue"]);
 
   // Difficulty
@@ -526,15 +682,20 @@ async function main() {
     "\nChoose your difficulty (Easy / Medium / Hard)\n> ",
     ["easy", "medium", "hard"]
   );
+
   printLine(`  Difficulty set to: ${difficulty.toUpperCase()}`);
 
   const name = await getUserInput("\nWhat is your name?\n> ", [], true);
   const player = new Player(name.trim(), difficulty);
+
   clearScreen();
 
   const isMarcus = player.name.toLowerCase() === "marcus";
+  const isRobert = player.name.toLowerCase() === "robert";
+
   const encounters = { ...BASE_ENCOUNTERS };
   if (isMarcus) encounters.campfire = MARCUS_ROCK_ENCOUNTER;
+  if (isRobert) encounters.campfire = ROBERT_CAMPFIRE_ENCOUNTER;
 
   const defeated = [];
   let firstVisit = true;
@@ -556,6 +717,7 @@ async function main() {
     const introTemplate = firstVisit
       ? "You find yourself suddenly teleported to an unfamiliar crossroad surrounded by {path_count} different paths.\n"
       : "You find yourself at the crossroad surrounded by {path_count} different paths.\n";
+
     describeCrossroad(player, encounters, defeated, introTemplate);
     firstVisit = false;
 
