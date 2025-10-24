@@ -664,11 +664,11 @@ function buildDirectionPrompt(encounters) {
 async function main() {
   clearScreen();
   printLine(`
-*******************************************
-*******************************************
-******* Welcome to the Epic Adventure! ***
-*******************************************
-*******************************************
+************************************
+************************************
+** Welcome to the Epic Adventure! **
+************************************
+************************************
 `);
   await getUserInput("Press Enter to continue...", ["continue"]);
 
