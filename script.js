@@ -296,7 +296,7 @@ const MARCUS_ROCK_ENCOUNTER = {
   crossroad_description:
     "To the Campfire:\tYou see a cozy campfire with your best friend Robert.",
   intro_text:
-    "\n\tYou are sitting around a campfire, just living your best wormy acetomenotistic life with your best friend Robert. " +
+    "\n\tYou are sitting around a campfire, just living your best wormy life with your best friend Robert. " +
     "You notice something is off but you can't put your freakishly long finger on it. After a brief moment of hypervigilance, " +
     "something catches your big ol' eye. There's something about that rock. That rock right there. It's... It's... IT'S PISSING YOU OFF! " +
     "You tell Robert but he is of little help. You are left with no other choice than to give that stupid smug little stupid smug rock a piece of your mind.\n",
